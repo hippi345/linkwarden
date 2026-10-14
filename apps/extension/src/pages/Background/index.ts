@@ -207,9 +207,20 @@ async function genericOnClick(
 ) {
   const { syncBookmarks, baseUrl } = await getConfig();
   const configured = await isConfigured();
-  if (!tab?.url || !tab?.title || !configured) {
+  if (!configured) {
     return;
   }
+
+  const targetUrl = info.linkUrl || info.srcUrl || tab?.url;
+  if (!targetUrl) {
+    return;
+  }
+
+  const targetTitle =
+    info.selectionText ||
+    (info.linkUrl || info.srcUrl ? targetUrl : tab?.title) ||
+    targetUrl;
+
   switch (info.menuItemId) {
     case "save-all-tabs": {
       const tabs = await browser.tabs.query({ currentWindow: true });
@@ -243,41 +254,41 @@ async function genericOnClick(
       }
       break;
     }
-    default:
-      // Handle cases where sync is enabled or not
+    default: {
+      const config = await getConfig();
       if (syncBookmarks && hasAPI("bookmarks.create")) {
         browser.bookmarks.create({
           parentId: "1",
-          title: tab.title,
-          url: tab.url,
+          title: targetTitle,
+          url: targetUrl,
         });
       } else {
-        const config = await getConfig();
-
         try {
           const newLink = await postLinkFetch(
             baseUrl,
             {
-              url: tab.url,
+              url: targetUrl,
               collection: {
-                name: "Unorganized",
+                name: config.defaultCollection || "Unorganized",
               },
               tags: [],
-              name: tab.title,
-              description: tab.title,
+              name: targetTitle,
+              description: targetTitle,
             },
             config.apiKey
           );
 
           const newLinkJson = await newLink.json();
           const newLinkUrl: bookmarkMetadata = newLinkJson.response;
-          newLinkUrl.bookmarkId = tab.id?.toString();
+          newLinkUrl.bookmarkId = tab?.id?.toString();
 
           await saveBookmarkMetadata(newLinkUrl);
         } catch (error) {
           console.error(error);
         }
       }
+      break;
+    }
   }
 }
 browser.runtime.onInstalled.addListener(async function () {
