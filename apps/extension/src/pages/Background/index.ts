@@ -20,6 +20,7 @@ import {
   getBookmarksMetadata,
   saveBookmarkMetadata,
 } from "../../@/lib/cache.ts";
+import { extractContextMenuTarget } from "../../@/lib/contextMenuTarget.ts";
 import OnClickData = chrome.contextMenus.OnClickData;
 
 // @types/chrome models these as TS enums, but the runtime APIs take and hand
@@ -211,15 +212,10 @@ async function genericOnClick(
     return;
   }
 
-  const targetUrl = info.linkUrl || info.srcUrl || tab?.url;
-  if (!targetUrl) {
+  const target = extractContextMenuTarget(info, tab);
+  if (!target) {
     return;
   }
-
-  const targetTitle =
-    info.selectionText ||
-    (info.linkUrl || info.srcUrl ? targetUrl : tab?.title) ||
-    targetUrl;
 
   switch (info.menuItemId) {
     case "save-all-tabs": {
@@ -255,27 +251,26 @@ async function genericOnClick(
       break;
     }
     default: {
-      const config = await getConfig();
       if (syncBookmarks && hasAPI("bookmarks.create")) {
         browser.bookmarks.create({
           parentId: "1",
-          title: targetTitle,
-          url: targetUrl,
+          title: target.title,
+          url: target.url,
         });
       } else {
         try {
           const newLink = await postLinkFetch(
             baseUrl,
             {
-              url: targetUrl,
+              url: target.url,
               collection: {
-                name: config.defaultCollection || "Unorganized",
+                name: "Unorganized",
               },
               tags: [],
-              name: targetTitle,
-              description: targetTitle,
+              name: target.title,
+              description: target.title,
             },
-            config.apiKey
+            (await getConfig()).apiKey
           );
 
           const newLinkJson = await newLink.json();
